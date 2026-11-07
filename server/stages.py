@@ -6,9 +6,11 @@ import importlib.util
 import json
 import shutil
 import threading
+import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -185,12 +187,21 @@ def cast(ctx: Ctx) -> StageResult:
         _publish_cast(ctx, chapter_cast, manga_cast)
         return StageResult("already done")
     cost, problem = 0.0, ""
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(f"[{now_str}] [cast] Building cast (existing cast: {existing})", flush=True)
     for attempt in (1, 2):
         ctx.progress(0.1 * attempt, "building the cast from the pages" if not existing else "adding new characters to the cast")
+        t0 = time.time()
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [cast] Attempt {attempt}/2: invoking agent...", flush=True)
         r = llm.run_agent(_cast_prompt(ctx, existing, problem), run_proc=ctx.run_proc, timeout=900)
         cost += r.cost_usd
+        dur = round(time.time() - t0, 1)
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [cast] Agent finished in {dur}s (cost: ${r.cost_usd:.4f})", flush=True)
         if not chapter_cast.is_file():
             problem = "the file RUN/cast/cast.json was not written"
+            print(f"[{now_str}] [cast] Rejection: {problem}", flush=True)
             continue
         data = json.loads(chapter_cast.read_text(encoding="utf-8"))
         errs = v.check_cast(data)
@@ -201,8 +212,12 @@ def cast(ctx: Ctx) -> StageResult:
                 errs = [f"existing character ids were dropped: {sorted(set(old) - new)}"]
         if not errs:
             _publish_cast(ctx, chapter_cast, manga_cast)
+            now_str = datetime.now().strftime("%H:%M:%S")
+            print(f"[{now_str}] [cast] Cast successfully validated ({len(data['characters'])} characters)", flush=True)
             return StageResult(f"{len(data['characters'])} characters", cost)
         problem = "; ".join(errs)[:400]
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [cast] Attempt {attempt} validation rejected: {problem}", flush=True)
     raise RuntimeError(f"could not produce a valid cast: {problem}")
 
 
@@ -257,21 +272,42 @@ def direct(ctx: Ctx) -> StageResult:
     problems: dict[str, str] = {}
     limit_hit = False
 
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(
+        f"[{now_str}] [direct] Chapter {ctx.chapter_id}: {len(all_ids)} total packets. "
+        f"{done_count} already directed, {len(todo)} remaining to process.",
+        flush=True,
+    )
+
     def run_batch(ids: list[str], probs: dict[str, str]) -> float:
+        t0 = time.time()
+        now_str = datetime.now().strftime("%H:%M:%S")
+        range_str = f"{ids[0]}..{ids[-1]}" if len(ids) > 1 else ids[0]
+        print(f"[{now_str}] [direct] Starting batch of {len(ids)} packets ({range_str})...", flush=True)
         r = llm.run_agent(_direct_prompt(ctx, ids, probs), run_proc=ctx.run_proc, timeout=1800)
+        dur = round(time.time() - t0, 1)
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [direct] Finished batch {range_str} in {dur}s (cost: ${r.cost_usd:.4f}, turns: {r.turns})", flush=True)
         return r.cost_usd
 
     for attempt in (1, 2):
+        if attempt > 1:
+            now_str = datetime.now().strftime("%H:%M:%S")
+            print(f"[{now_str}] [direct] Starting retry attempt {attempt} for {len(todo)} packet(s)...", flush=True)
         size = config.DIRECT_BATCH_PACKETS
         batches = [todo[i:i + size] for i in range(0, len(todo), size)]
         with ThreadPoolExecutor(max_workers=config.DIRECT_CONCURRENCY) as ex:
             futs = {ex.submit(run_batch, b, {k: problems[k] for k in b if k in problems}): b for b in batches}
             for f in as_completed(futs):
+                batch_ids = futs[f]
+                range_str = f"{batch_ids[0]}..{batch_ids[-1]}" if len(batch_ids) > 1 else batch_ids[0]
                 try:
                     c = f.result()
                 except Cancelled:
                     raise
-                except llm.LlmLimitError:
+                except llm.LlmLimitError as err:
+                    now_str = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{now_str}] [direct] LLM rate/usage limit hit during batch {range_str}: {err}", flush=True)
                     limit_hit = True  # retrying cannot help; stop starting new batches
                     for other in futs:
                         other.cancel()
@@ -279,15 +315,25 @@ def direct(ctx: Ctx) -> StageResult:
                 except Exception as e:
                     if ctx.cancelled():
                         raise Cancelled()
-                    for pid in futs[f]:
+                    now_str = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{now_str}] [direct] Batch {range_str} failed with error: {e}", flush=True)
+                    for pid in batch_ids:
                         problems[pid] = f"agent run failed: {e}"
                     continue
                 with lock:
                     cost += c
-                    ids = futs[f]
-                    ok = sum(1 for pid in ids if not _check_directed(v, ctx, pid, cast_ids))
+                    for pid in batch_ids:
+                        errs = _check_directed(v, ctx, pid, cast_ids)
+                        if errs:
+                            problems[pid] = "; ".join(errs)
+                            now_str = datetime.now().strftime("%H:%M:%S")
+                            print(f"[{now_str}] [direct] Packet {pid} validation rejected: {problems[pid]}", flush=True)
+                    ok = sum(1 for pid in batch_ids if not _check_directed(v, ctx, pid, cast_ids))
                     done_count += ok
-                ctx.progress(min(1.0, done_count / len(all_ids)), f"directing: {done_count}/{len(all_ids)} packets")
+                msg = f"directing: {done_count}/{len(all_ids)} packets"
+                now_str = datetime.now().strftime("%H:%M:%S")
+                print(f"[{now_str}] [direct] Progress: {done_count}/{len(all_ids)} packets complete", flush=True)
+                ctx.progress(min(1.0, done_count / len(all_ids)), msg)
         if limit_hit:
             raise llm.LlmLimitError(llm.LIMIT_MESSAGE)
         todo = []
@@ -299,7 +345,14 @@ def direct(ctx: Ctx) -> StageResult:
         if not todo:
             return StageResult(f"{len(all_ids)} packets directed", cost)
         done_count = len(all_ids) - len(todo)
-    raise RuntimeError(f"{len(todo)} packet(s) could not be directed after a retry: {', '.join(todo[:5])}")
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [direct] Attempt {attempt} finished: {len(todo)} packet(s) remaining.", flush=True)
+
+    sample_errors = "; ".join(f"{p}: {problems.get(p, 'unknown')}" for p in todo[:5])
+    raise RuntimeError(
+        f"{len(todo)} packet(s) could not be directed after a retry: {', '.join(todo[:5])}. "
+        f"Sample errors: {sample_errors}"
+    )
 
 
 # ---- 8 voices, 9 package ------------------------------------------------------------------------------

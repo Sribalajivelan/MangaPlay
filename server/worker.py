@@ -12,6 +12,7 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -188,32 +189,46 @@ def _process(cid: int) -> None:
         ctx.run.mkdir(parents=True, exist_ok=True)
         done = 0.0
         total_cost = 0.0
-        for name, weight in STAGES:
+        now_ts = datetime.now().strftime("%H:%M:%S")
+        print(f"\n[{now_ts}] [worker] >>> Processing started for chapter {cid} (total stages: {len(STAGES)})", flush=True)
+        for stage_idx, (name, weight) in enumerate(STAGES, 1):
             if active.cancelled:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] [worker] Chapter {cid} cancelled by user.", flush=True)
                 return
             ctx.progress = lambda frac, detail=None, _d=done, _w=weight, _n=name: _set(
                 cid, stage=_n, progress=round(min(0.999, _d + _w * max(0.0, min(1.0, frac))), 4), detail=detail or f"{_n}")
             _set(cid, stage=name, progress=round(done, 4), detail=f"{name}")
             t0 = time.time()
+            now_ts = datetime.now().strftime("%H:%M:%S")
+            print(f"[{now_ts}] [worker] [ch {cid}] [Stage {stage_idx}/{len(STAGES)}] Starting stage '{name}'...", flush=True)
             try:
                 res = stages.STAGE_FUNCS[name](ctx)
             except Cancelled:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] [worker] [ch {cid}] Stage '{name}' cancelled.", flush=True)
                 return
             except Exception as e:
                 if active.cancelled:
                     return
+                dur = round(time.time() - t0, 1)
+                now_ts = datetime.now().strftime("%H:%M:%S")
+                print(f"[{now_ts}] [worker] [ch {cid}] !!! Stage '{name}' FAILED after {dur}s: {e}", flush=True)
                 traceback.print_exc()
                 with db.db() as con:
                     con.execute("INSERT INTO stage_run(chapter_id,stage,status,started_at,seconds,note) VALUES(?,?,?,?,?,?)",
-                                (cid, name, "failed", db.now(), round(time.time() - t0, 1), str(e)[:300]))
+                                (cid, name, "failed", db.now(), dur, str(e)[:300]))
                 _fail(cid, f"{name}: {e}")
                 return
+            dur = round(time.time() - t0, 1)
             total_cost += res.cost_usd
+            now_ts = datetime.now().strftime("%H:%M:%S")
+            print(f"[{now_ts}] [worker] [ch {cid}] [Stage {stage_idx}/{len(STAGES)}] Stage '{name}' DONE in {dur}s ({res.note}, cost: ${res.cost_usd:.4f})", flush=True)
             with db.db() as con:
                 con.execute("INSERT INTO stage_run(chapter_id,stage,status,started_at,seconds,cost_usd,note) VALUES(?,?,?,?,?,?,?)",
-                            (cid, name, "done", db.now(), round(time.time() - t0, 1), res.cost_usd, res.note))
+                            (cid, name, "done", db.now(), dur, res.cost_usd, res.note))
                 con.execute("UPDATE chapter SET cost_usd=COALESCE((SELECT SUM(cost_usd) FROM stage_run WHERE chapter_id=? AND status='done'),0) WHERE id=?", (cid, cid))
             done += weight
+        now_ts = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_ts}] [worker] >>> Processing COMPLETE for chapter {cid} (total cost: ${total_cost:.4f})\n", flush=True)
         _set(cid, status="ready", stage=None, progress=1.0, detail=None, ready_at=db.now())
     finally:
         with _idle:

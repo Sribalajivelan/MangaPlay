@@ -14,7 +14,9 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -103,25 +105,41 @@ def _run_claude(
         "-p", "--allowedTools", "Read", "Write", "--permission-mode", "dontAsk",
         "--output-format", "json", "--max-turns", str(max_turns), "--no-session-persistence",
     ]
+    t0 = time.time()
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(f"[{now_str}] [llm:claude] Starting agent (timeout={timeout}s, max_turns={max_turns})...", flush=True)
     proc = run_proc(cmd, cwd=config.ROOT, input_text=prompt, timeout=timeout)
+    duration = round(time.time() - t0, 1)
+
     if proc.returncode != 0:
         text = f"{proc.stderr or ''} {proc.stdout or ''}"
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:claude] Process failed (code {proc.returncode}) after {duration}s: {(proc.stderr or proc.stdout)[-300:].strip()}", flush=True)
         if LIMIT_RE.search(text):
             raise LlmLimitError(LIMIT_MESSAGE)
         raise LlmError(f"Claude agent exited with {proc.returncode}: {(proc.stderr or proc.stdout)[-300:]}")
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:claude] Output was not JSON: {proc.stdout[-300:].strip()}", flush=True)
         raise LlmError(f"Claude agent output was not JSON: {proc.stdout[-200:]}")
     if data.get("is_error"):
         reason = str(data.get("result"))
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:claude] Agent reported error: {reason[:300]}", flush=True)
         if LIMIT_RE.search(reason):
             raise LlmLimitError(LIMIT_MESSAGE)
         raise LlmError(f"Claude agent reported an error: {reason[:300]}")
+
+    cost_usd = float(data.get("total_cost_usd") or 0)
+    turns = int(data.get("num_turns") or 0)
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(f"[{now_str}] [llm:claude] Finished in {duration}s ({turns} turns, cost: ${cost_usd:.4f})", flush=True)
     return LlmResult(
         text=str(data.get("result", "")),
-        cost_usd=float(data.get("total_cost_usd") or 0),
-        turns=int(data.get("num_turns") or 0),
+        cost_usd=cost_usd,
+        turns=turns,
     )
 
 
@@ -140,20 +158,31 @@ def _run_agy(
     if config.AGY_MODEL:
         cmd.extend(["--model", config.AGY_MODEL])
 
+    t0 = time.time()
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(f"[{now_str}] [llm:agy] Starting agent (model={config.AGY_MODEL or 'default'})...", flush=True)
     proc = run_proc(cmd, cwd=config.ROOT, input_text=prompt, timeout=timeout)
+    duration = round(time.time() - t0, 1)
+
     if proc.returncode != 0:
         text = f"{proc.stderr or ''} {proc.stdout or ''}"
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:agy] Process failed (code {proc.returncode}) after {duration}s: {(proc.stderr or proc.stdout)[-300:].strip()}", flush=True)
         if LIMIT_RE.search(text):
             raise LlmLimitError(LIMIT_MESSAGE)
         raise LlmError(f"Antigravity agy agent exited with {proc.returncode}: {(proc.stderr or proc.stdout)[-300:]}")
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError:
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:agy] Output was not JSON: {proc.stdout[-300:].strip()}", flush=True)
         raise LlmError(f"Antigravity agy output was not JSON: {proc.stdout[-200:]}")
 
     status = data.get("status")
     if status and status != "SUCCESS":
         reason = str(data.get("response") or data.get("error") or status)
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[{now_str}] [llm:agy] Agent reported error ({status}): {reason[:300]}", flush=True)
         if LIMIT_RE.search(reason):
             raise LlmLimitError(LIMIT_MESSAGE)
         raise LlmError(f"Antigravity agy reported an error ({status}): {reason[:300]}")
@@ -164,11 +193,14 @@ def _run_agy(
     output_tokens = int(usage.get("output_tokens") or 0)
     # Gemini 2.5 Flash pricing benchmark: ~$0.075 / 1M input, ~$0.30 / 1M output
     cost_usd = (input_tokens * 0.000000075) + (output_tokens * 0.0000003)
+    turns = int(data.get("num_turns") or 1)
+    now_str = datetime.now().strftime("%H:%M:%S")
+    print(f"[{now_str}] [llm:agy] Finished in {duration}s ({turns} turns, cost: ${cost_usd:.4f})", flush=True)
 
     return LlmResult(
         text=str(data.get("response", "")),
         cost_usd=round(cost_usd, 6),
-        turns=int(data.get("num_turns") or 1),
+        turns=turns,
     )
 
 
