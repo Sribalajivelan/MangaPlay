@@ -159,8 +159,8 @@ MangaPlay supports running headless authoring passes with either **Claude Code**
 - **Explicit Antigravity CLI (`agy`):**
   ```bash
   export MANGA_LLM_PROVIDER="agy"
-  # Optional: customize the Gemini model (e.g. gemini-2.5-flash, gemini-2.5-pro)
-  export MANGA_AGY_MODEL="gemini-2.5-flash"
+  # Optional: model (gemini-3.8-flash-high, gemini-3.8-flash-medium, claude-sonnet-4-6)
+  export MANGA_AGY_MODEL="gemini-3.8-flash-high"
   ```
 
 ---

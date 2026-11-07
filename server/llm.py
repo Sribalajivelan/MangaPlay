@@ -143,6 +143,19 @@ def _run_claude(
     )
 
 
+AGY_MODEL_ALIASES = {
+    "gemini-2.5-flash": "gemini-3.8-flash-high",
+    "gemini-flash": "gemini-3.8-flash-high",
+    "flash": "gemini-3.8-flash-high",
+    "gemini-3.8-flash": "gemini-3.8-flash-high",
+    "gemini-flash-high": "gemini-3.8-flash-high",
+    "gemini-flash-medium": "gemini-3.8-flash-medium",
+    "gemini-flash-low": "gemini-3.8-flash-low",
+    "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-6-thinking",
+}
+
+
 def _run_agy(
     prompt: str,
     *,
@@ -153,14 +166,17 @@ def _run_agy(
     cmd = agy_command() + [
         "--output-format", "json",
         "--dangerously-skip-permissions",
-        "-p", "-",
     ]
-    if config.AGY_MODEL:
-        cmd.extend(["--model", config.AGY_MODEL])
+    model = (config.AGY_MODEL or "").strip()
+    if model:
+        resolved_model = AGY_MODEL_ALIASES.get(model.lower(), model)
+        cmd.extend(["--model", resolved_model])
+    else:
+        resolved_model = "default"
 
     t0 = time.time()
     now_str = datetime.now().strftime("%H:%M:%S")
-    print(f"[{now_str}] [llm:agy] Starting agent (model={config.AGY_MODEL or 'default'})...", flush=True)
+    print(f"[{now_str}] [llm:agy] Starting agent (model={resolved_model})...", flush=True)
     proc = run_proc(cmd, cwd=config.ROOT, input_text=prompt, timeout=timeout)
     duration = round(time.time() - t0, 1)
 

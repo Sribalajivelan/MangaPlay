@@ -83,6 +83,18 @@ def test_run_agy_error():
         llm._run_agy("prompt", run_proc=fake_proc)
 
 
+def test_agy_model_alias(monkeypatch):
+    monkeypatch.setattr(config, "AGY_MODEL", "gemini-2.5-flash")
+    fake_proc = MagicMock(return_value=make_proc(json.dumps({
+        "status": "SUCCESS", "response": "ok", "usage": {"input_tokens": 100, "output_tokens": 50}
+    })))
+    llm._run_agy("prompt", run_proc=fake_proc)
+    cmd = fake_proc.call_args[0][0]
+    assert "--model" in cmd
+    assert cmd[cmd.index("--model") + 1] == "gemini-3.8-flash-high"
+    assert "-p" not in cmd
+
+
 def test_run_agent_dispatch(monkeypatch):
     claude_called = []
     agy_called = []
