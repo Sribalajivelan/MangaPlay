@@ -78,7 +78,7 @@ MangaPlay separates **offline authoring** from **real-time playback**:
 
 ### 1. Clone the Repository
 ```bash
-git clone git@github-personal:Sribalajivelan/MangaPlay.git
+git clone https://github.com/Sribalajivelan/MangaPlay.git
 cd MangaPlay
 ```
 
