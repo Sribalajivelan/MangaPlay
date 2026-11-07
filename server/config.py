@@ -25,3 +25,7 @@ if os.environ.get("MANGA_ALLOW_TESTCLIENT"):
 # processing
 DIRECT_BATCH_PACKETS = int(os.environ.get("MANGA_DIRECT_BATCH", "6"))
 DIRECT_CONCURRENCY = int(os.environ.get("MANGA_DIRECT_CONCURRENCY", "3"))
+
+# LLM provider: "auto", "claude", or "agy"
+LLM_PROVIDER = os.environ.get("MANGA_LLM_PROVIDER", "auto").lower()
+AGY_MODEL = os.environ.get("MANGA_AGY_MODEL", "")

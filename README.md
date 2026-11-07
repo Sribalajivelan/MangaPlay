@@ -64,13 +64,18 @@ MangaPlay separates **offline authoring** from **real-time playback**:
 - **RAM:** 16 GB minimum (32 GB recommended when processing long, high-resolution webtoon strips).
 - **GPU:** **Not required.** All local neural models (YOLO detection, RapidOCR, Kokoro TTS) run on CPU via ONNX Runtime.
 
-### 2. Software
+### 2. Software & Agent CLIs
 - **Operating System:** Windows 10/11, macOS, or Linux.
 - **Python:** `3.11` (with `pip` and virtual environment support).
 - **Node.js:** `v20.x` or `v24.x` + [**pnpm**](https://pnpm.io/).
-- **Claude Code CLI:** Required for the headless agent stages (`cast` and `direct`).
-  - Install via npm: `npm install -g @anthropic-ai/claude-code`
-  - Authenticate with your Anthropic subscription / login: `claude login`
+- **AI Agent CLI (Supports either or both):**
+  - **Option A: Antigravity CLI (`agy`)** — Powered by Google Gemini (e.g., Gemini 2.5 Flash / Pro).
+    - Ensure `agy` is authenticated and accessible in your `PATH`.
+  - **Option B: Claude Code CLI (`claude`)** — Powered by Anthropic Claude (Sonnet / Opus).
+    - Install via npm: `npm install -g @anthropic-ai/claude-code`
+    - Authenticate via: `claude login`
+
+> **Note on LLM Provider Selection:** MangaPlay automatically detects whether `claude` or `agy` is installed. You can also explicitly choose via the `MANGA_LLM_PROVIDER` environment variable (`auto`, `claude`, or `agy`).
 
 ---
 
@@ -143,6 +148,20 @@ For live frontend hot-reloading during development:
   pnpm dev
   ```
   Open **`http://localhost:5173`** (Vite automatically proxies `/api` and `/bundle` to `:8000`).
+
+### Choosing your LLM Provider (Claude Code or Antigravity `agy`)
+MangaPlay supports running headless authoring passes with either **Claude Code** or Google's **Antigravity CLI**:
+- **Automatic Detection (`auto`, default):** Automatically uses whichever CLI is installed and configured in your environment.
+- **Explicit Claude Code:**
+  ```bash
+  export MANGA_LLM_PROVIDER="claude"
+  ```
+- **Explicit Antigravity CLI (`agy`):**
+  ```bash
+  export MANGA_LLM_PROVIDER="agy"
+  # Optional: customize the Gemini model (e.g. gemini-2.5-flash, gemini-2.5-pro)
+  export MANGA_AGY_MODEL="gemini-2.5-flash"
+  ```
 
 ---
 

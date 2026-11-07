@@ -235,3 +235,14 @@ def test_voices_stage_creates_and_keeps_manga_voices(tmp_path):
     assert "c1" in first and "narrator" in first
     assert stages.voices_stage(ctx).note == "voices unchanged"
     assert json.loads(path.read_text()) == first
+
+
+def test_cast_and_direct_with_agy_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LLM_PROVIDER", "agy")
+    monkeypatch.setenv("MANGA_AGY_CMD", json.dumps([sys.executable, str(FAKE)]))
+    monkeypatch.setenv("FAKE_PROVIDER", "agy")
+    ctx = direct_fixture(tmp_path, n_packets=2)
+    res = stages.direct(ctx)
+    assert len(list((ctx.run / "directed").glob("p*.json"))) == 2
+    assert "2 packets" in res.note
+

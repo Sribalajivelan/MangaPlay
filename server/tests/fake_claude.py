@@ -18,15 +18,31 @@ run = Path(re.search(r"RUN = (.+)", prompt).group(1).strip())
 
 
 def result(cost=0.25):
-    print(json.dumps({"result": "done", "total_cost_usd": cost, "num_turns": 3, "is_error": False}))
+    if os.environ.get("FAKE_PROVIDER") == "agy":
+        print(json.dumps({
+            "conversation_id": "fake-conversation-123",
+            "status": "SUCCESS",
+            "response": "done",
+            "duration_seconds": 1.5,
+            "num_turns": 3,
+            "usage": {"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500}
+        }))
+    else:
+        print(json.dumps({"result": "done", "total_cost_usd": cost, "num_turns": 3, "is_error": False}))
 
 
 if os.environ.get("FAKE_LIMIT"):
-    print(json.dumps({"result": "Claude AI usage limit reached|1731000000", "is_error": True}))
+    if os.environ.get("FAKE_PROVIDER") == "agy":
+        print(json.dumps({"status": "ERROR", "response": "RESOURCE_EXHAUSTED: quota exceeded"}))
+    else:
+        print(json.dumps({"result": "Claude AI usage limit reached|1731000000", "is_error": True}))
     sys.exit(0)
 
 if os.environ.get("FAKE_ERROR"):
-    print(json.dumps({"result": "overloaded", "is_error": True}))
+    if os.environ.get("FAKE_PROVIDER") == "agy":
+        print(json.dumps({"status": "ERROR", "response": "overloaded"}))
+    else:
+        print(json.dumps({"result": "overloaded", "is_error": True}))
     sys.exit(0)
 
 if "Cast Builder" in prompt:

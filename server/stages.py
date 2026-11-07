@@ -143,10 +143,23 @@ def packets(ctx: Ctx) -> StageResult:
 
 
 # ---- 6 cast (model) -----------------------------------------------------------------------------------
+def _skill_path(name: str) -> Path:
+    provider = llm.resolve_provider()
+    if provider == "agy":
+        agy_p = config.ROOT / ".agents" / "skills" / name / "SKILL.md"
+        if agy_p.exists():
+            return agy_p
+    claude_p = config.ROOT / ".claude" / "skills" / name / "SKILL.md"
+    if claude_p.exists():
+        return claude_p
+    return config.ROOT / ".agents" / "skills" / name / "SKILL.md"
+
+
 def _cast_prompt(ctx: Ctx, existing: bool, problem: str = "") -> str:
+    skill = _skill_path("manga-cast")
     base = (
         "You are the Cast Builder for a personal webtoon read-aloud tool. Follow the skill file exactly:\n"
-        f"  {config.ROOT / '.claude' / 'skills' / 'manga-cast' / 'SKILL.md'}\n\n"
+        f"  {skill}\n\n"
         f"RUN = {ctx.run}\n"
         "Inputs: the contact sheets RUN/cast/sheet_*.png (read ALL of them with the Read tool) and RUN/draft_beats.json (OCR text with positions).\n"
         "Write the result ONLY to RUN/cast/cast.json in the format the skill specifies. Do not run any commands. "
@@ -200,7 +213,7 @@ def _publish_cast(ctx: Ctx, chapter_cast: Path, manga_cast: Path) -> None:
 
 # ---- 7 direct (model) ---------------------------------------------------------------------------------
 def _direct_prompt(ctx: Ctx, ids: list[str], problems: dict[str, str]) -> str:
-    skill = config.ROOT / ".claude" / "skills" / "manga-direct" / "SKILL.md"
+    skill = _skill_path("manga-direct")
     py = config.PYTHON
     p = (
         "You are a Director for a personal webtoon read-aloud tool. Follow this skill file exactly:\n"
