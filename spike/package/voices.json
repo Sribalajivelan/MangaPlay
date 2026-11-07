@@ -1,0 +1,11 @@
+{
+  "_comment": "Cast id -> Kokoro voice + age profile. pitch_st shifts pitch AND formants together (semitones): up reads younger, down reads older. speed multiplies the speaking rate. Edit freely, then run render_audio.py (only changed lines are re-synthesised).",
+  "c1": { "voice": "bm_george", "pitch_st": -1.5, "speed": 0.95, "note": "adult male, stern older man: lower and slower" },
+  "c2": { "voice": "am_michael", "pitch_st": 0.0, "speed": 1.0, "note": "young adult male, dry and lazy: natural" },
+  "c3": { "voice": "af_heart", "pitch_st": 2.5, "speed": 1.05, "note": "teen girl, bright and cheeky: higher and quicker (younger)" },
+  "c4": { "voice": "bf_emma", "pitch_st": -0.7, "speed": 0.97, "note": "young adult woman, cool and commanding: slightly lower, measured" },
+  "narrator": { "voice": "am_adam", "pitch_st": 0.0, "speed": 1.0, "note": "outside narrator" },
+  "system": { "voice": "af_alloy", "pitch_st": 0.0, "speed": 1.0, "note": "game system windows" },
+  "announcer": { "voice": "af_jessica", "pitch_st": 0.0, "speed": 1.0, "note": "in-world broadcast" },
+  "unknown": { "voice": "af_sarah", "pitch_st": 0.0, "speed": 1.0, "note": "no directed speaker" }
+}

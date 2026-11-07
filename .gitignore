@@ -1,0 +1,21 @@
+.venv/
+.cache/
+samples/
+spike/**/out/
+bundles/
+node_modules/
+__pycache__/
+*.pyc
+.env
+library/
+
+# build output and tool caches
+dist/
+.vite/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log
+
+# local-only Claude Code settings
+.claude/settings.local.json
